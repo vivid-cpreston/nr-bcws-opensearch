@@ -81,52 +81,74 @@ public class GetFileFromWFDMAPI {
     Boolean oPRExists = false;
     Boolean incidentNumberExists = false;
     Boolean appAcronymExists = false;
+    Boolean uploadedByExists = false;
+
+    Boolean creatorIsNull = false;
+    Boolean uploadedByIsNull = false;
 
     // Add metadata to the File details to flag it as "Unscanned"
     JSONArray metaArray = fileDetails.getJSONArray("metadata");
     // Locate any existing scan meta and remove
     for (int i = 0; i < metaArray.length(); i++) {
       String metadataName = metaArray.getJSONObject(i).getString("metadataName");
-      if (metadataName.equalsIgnoreCase("WFDMIndexVersion-" + versionNumber)
+      if ( i >= 0 && metadataName.equalsIgnoreCase("WFDMIndexVersion-" + versionNumber)
           || (metadataName.equalsIgnoreCase("wfdm-indexed-v" + versionNumber))) {
         metaArray.remove(i);
-        break;
+        i--;
       }
-      if (metadataName.equalsIgnoreCase("WFDMIndexDate-" + versionNumber)) {
+      if (i >= 0 && metadataName.equalsIgnoreCase("WFDMIndexDate-" + versionNumber)) {
         metaArray.remove(i);
-        break;
+        i--;
       }
 
-      if (!creatorExists) creatorExists = metadataName.equalsIgnoreCase("Creator");
-      if (!titleExists) titleExists = metadataName.equalsIgnoreCase("Title");
-      if (!dateCreatedExists) dateCreatedExists = metadataName.equalsIgnoreCase("DateCreated");
-      if (!dateModifiedExists) dateModifiedExists = metadataName.equalsIgnoreCase("DateModified");
-      if (!descriptionExists) descriptionExists = metadataName.equalsIgnoreCase("Description");
-      if (!formatExists) formatExists = metadataName.equalsIgnoreCase("Format");
-      if (!uniqueIdentifierExists) uniqueIdentifierExists = metadataName.equalsIgnoreCase("UniqueIdentifier");
-      if (!informationScheduleExists)  informationScheduleExists = metadataName.equalsIgnoreCase("InformationSchedule");
-      if (!securityClassificationExists) securityClassificationExists = metadataName.equalsIgnoreCase("SecurityClassification");
-      if (!retentionScheduleExists)  retentionScheduleExists = metadataName.equalsIgnoreCase("RetentionSchedule");
-      if (!oPRExists)  oPRExists = metadataName.equalsIgnoreCase("OPR");      
-      if (!incidentNumberExists) incidentNumberExists = metadataName.equalsIgnoreCase("IncidentNumber");
-      if (!appAcronymExists) appAcronymExists = metadataName.equalsIgnoreCase("AppAcronym");
+      // By default the API inherits the parent folders meta value, 
+      //Creator needs to have a default value of uploadedBy,
+      // So if the parent folder creator is Null, we still want to set the default value
+      if (i >= 0 && metadataName.equals("Creator")) {
+        creatorIsNull = metaArray.getJSONObject(i).getString("metadataValue").equals("null");
+      }
+      if (i >= 0 && metadataName.equals("UploadedBy")) {
+        uploadedByIsNull = metaArray.getJSONObject(i).getString("metadataValue").equals("null");
+      }
+
+      if (!creatorExists) creatorExists = metadataName.equals("Creator");
+      if (!uploadedByExists) uploadedByExists = metadataName.equals("UploadBy");
+      if (!titleExists) titleExists = metadataName.equals("Title");
+      if (!dateCreatedExists) dateCreatedExists = metadataName.equals("DateCreated");
+      if (!dateModifiedExists) dateModifiedExists = metadataName.equals("DateModified");
+      if (!descriptionExists) descriptionExists = metadataName.equals("Description");
+      if (!formatExists) formatExists = metadataName.equals("Format");
+      if (!uniqueIdentifierExists) uniqueIdentifierExists = metadataName.equals("UniqueIdentifier");
+      if (!informationScheduleExists)  informationScheduleExists = metadataName.equals("InformationSchedule");
+      if (!securityClassificationExists) securityClassificationExists = metadataName.equals("SecurityClassification");
+      if (!oPRExists)  oPRExists = metadataName.equals("OPR");      
+      if (!incidentNumberExists) incidentNumberExists = metadataName.equals("IncidentNumber");
+      if (!appAcronymExists) appAcronymExists = metadataName.equals("AppAcronym");
 
     }
 
     // check for default metadata, if it exists do nothing
-    if (!creatorExists) metaArray.put(addMeta("Creator"));
-    if (!titleExists) metaArray.put(addMeta("Title"));
-    if (!dateCreatedExists) metaArray.put(addMeta("DateCreated"));
-    if (!dateModifiedExists) metaArray.put(addMeta("DateModified"));
-    if (!descriptionExists) metaArray.put(addMeta("Description"));
-    if (!formatExists) metaArray.put(addMeta("Format"));
-    if (!uniqueIdentifierExists) metaArray.put(addMeta("UniqueIdentifier"));
-    if (!informationScheduleExists) metaArray.put(addMeta("InformationSchedule"));
-    if (!securityClassificationExists) metaArray.put(addMeta("SecurityClassification"));
-    if (!retentionScheduleExists)  metaArray.put(addMeta("RetentionSchedule"));
-    if (!oPRExists) metaArray.put(addMeta("OPR"));
-    if (!incidentNumberExists) metaArray.put(addMeta("IncidentNumber"));
-    if (!appAcronymExists) metaArray.put(addMeta("AppAcronym"));
+    if (!creatorExists || creatorIsNull)  {
+      String uploadedBy = fileDetails.isNull("uploadedBy") ? "null" : fileDetails.getString("uploadedBy");
+      metaArray.put(addMeta("Creator", uploadedBy));
+    }
+    if (!uploadedByExists || uploadedByIsNull) {
+      String uploadedBy = fileDetails.isNull("uploadedBy") ? "null" : fileDetails.getString("uploadedBy");
+      metaArray.put(addMeta("UploadedBy", uploadedBy));
+    }
+
+
+    if (!titleExists) metaArray.put(addMeta("Title", "null"));
+    if (!dateCreatedExists) metaArray.put(addMeta("DateCreated", "null"));
+    if (!dateModifiedExists) metaArray.put(addMeta("DateModified", "null"));
+    if (!descriptionExists) metaArray.put(addMeta("Description", "null"));
+    if (!formatExists) metaArray.put(addMeta("Format", "null"));
+    if (!uniqueIdentifierExists) metaArray.put(addMeta("UniqueIdentifier", "null"));
+    if (!informationScheduleExists) metaArray.put(addMeta("InformationSchedule", "null"));
+    if (!securityClassificationExists) metaArray.put(addMeta("SecurityClassification", "null"));
+    if (!oPRExists) metaArray.put(addMeta("OPR", "null"));
+    if (!incidentNumberExists) metaArray.put(addMeta("IncidentNumber", "null"));
+    if (!appAcronymExists) metaArray.put(addMeta("AppAcronym", "null"));
 
     // inject scan meta
     JSONObject meta = new JSONObject();
@@ -153,11 +175,11 @@ public class GetFileFromWFDMAPI {
     return metaUpdateResponse.getStatus() == 200;
   }
 
-  public static JSONObject addMeta(String metaName) {
+  public static JSONObject addMeta(String metaName, String metaValue) {
     JSONObject meta = new JSONObject();
     meta.put("@type", "http://resources.wfdm.nrs.gov.bc.ca/fileMetadataResource");
     meta.put("metadataName", metaName);
-    meta.put("metadataValue", "null");
+    meta.put("metadataValue", metaValue);
     return meta;
   }
 

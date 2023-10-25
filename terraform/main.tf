@@ -2,12 +2,11 @@ terraform {
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = "3.72.0"
+      version = "5.6.0"
     }
   }
   required_version = ">= 1.1.0"
 }
-
 
 data "aws_vpc" "main_vpc" {
   id = var.vpc_id
@@ -613,9 +612,7 @@ resource "aws_lambda_layer_version" "aws-java-base-layer-terraform" {
   s3_bucket           = data.aws_s3_bucket.terraform-s3-bucket.bucket
   s3_key              = var.layer_file_name
   description         = "Common layer with java jars files"
-  compatible_runtimes = ["java8"]
-  skip_destroy        = true
-
+  compatible_runtimes = ["java17"]
 }
 
 
@@ -628,7 +625,7 @@ resource "aws_lambda_function" "terraform_wfdm_indexing_function" {
   role          = aws_iam_role.lambda_role.arn
   handler       = var.lambda_function_handler
   source_code_hash = "${data.aws_s3_bucket_object.indexing_function_hash.body}"
-  runtime     = "java8"
+  runtime     = "java17"
   layers      = ["${aws_lambda_layer_version.aws-java-base-layer-terraform.arn}"]
   memory_size = var.memory_size
   timeout     = var.timeout_length
@@ -646,7 +643,7 @@ resource "aws_lambda_function" "terraform_wfdm_indexing_function" {
       WFDM_DOCUMENT_CLAMAV_S3BUCKET            = data.aws_s3_bucket.clamav-bucket.bucket
       WFDM_DOCUMENT_INDEX_ACCOUNT_NAME         = var.document_index_account_name
       WFDM_DOCUMENT_INDEX_ACCOUNT_PASSWORD     = var.documents_index_password
-      WFDM_DOCUMENT_OPENSEARCH_DOMAIN_ENDPOINT = "https://${var.opensearchDomainName}.${var.domain}"
+      WFDM_DOCUMENT_OPENSEARCH_DOMAIN_ENDPOINT = "${var.opensearchDomainName}.${var.domain}"
       WFDM_DOCUMENT_OPENSEARCH_INDEXNAME       = aws_elasticsearch_domain.main_elasticsearch_domain.domain_name
       WFDM_DOCUMENT_SECRET_MANAGER             = "${var.secret_manager_name}"
       WFDM_DOCUMENT_TOKEN_URL                  = "${var.document_token_url}"
@@ -654,6 +651,9 @@ resource "aws_lambda_function" "terraform_wfdm_indexing_function" {
       WFDM_DOCUMENT_FILE_SIZE_SCAN_LIMIT       = "${var.file_scan_size_limit}"
     }
   }
+  depends_on = [
+    aws_lambda_layer_version.aws-java-base-layer-terraform
+  ]
 }
 
 #Lambda File Indexing Initializer
@@ -664,7 +664,7 @@ resource "aws_lambda_function" "terraform_indexing_initializer_function" {
   role          = aws_iam_role.lambda_initializer_role.arn
   handler       = var.indexing_function_handler
   source_code_hash = "${data.aws_s3_bucket_object.indexing_initializer_hash.body}"
-  runtime     = "java8"
+  runtime     = "java17"
   layers      = ["${aws_lambda_layer_version.aws-java-base-layer-terraform.arn}"]
   memory_size = var.memory_size
   timeout     = var.timeout_length_large
@@ -686,6 +686,9 @@ resource "aws_lambda_function" "terraform_indexing_initializer_function" {
 
     }
   }
+  depends_on = [
+    aws_lambda_layer_version.aws-java-base-layer-terraform
+  ]
 }
 
 #Lambda ClamAV handler
@@ -696,7 +699,7 @@ resource "aws_lambda_function" "lambda_clamav_handler" {
   role          = aws_iam_role.lambda_clamav_role.arn
   handler       = var.clamav_function_handler
   source_code_hash = "${data.aws_s3_bucket_object.clamav_function_hash.body}"
-  runtime     = "java8"
+  runtime     = "java17"
   layers      = ["${aws_lambda_layer_version.aws-java-base-layer-terraform.arn}"]
   memory_size = var.memory_size
   timeout     = 30
@@ -716,6 +719,9 @@ resource "aws_lambda_function" "lambda_clamav_handler" {
       WFDM_DOCUMENT_SECRET_MANAGER = "${var.secret_manager_name}"
     }
   }
+  depends_on = [
+    aws_lambda_layer_version.aws-java-base-layer-terraform
+  ]
 }
 
 data "aws_sqs_queue" "clamav_queue" {
@@ -800,6 +806,16 @@ resource "aws_elasticsearch_domain" "main_elasticsearch_domain" {
     enabled = true
   }
 
+  // Workaround to bypass bug in terraform, see https://github.com/hashicorp/terraform-provider-aws/issues/30205 for details
+  dynamic "auto_tune_options" {
+    for_each = var.opensearch_autotune == "ENABLED" ? [1] : []
+
+    content {
+      desired_state       = var.opensearch_autotune
+      rollback_on_disable = "NO_ROLLBACK"
+    }
+  }
+
   cluster_config {
     dedicated_master_count   = var.master_node_instance_count
     dedicated_master_enabled = var.master_node_usage
@@ -825,21 +841,23 @@ resource "aws_elasticsearch_domain" "main_elasticsearch_domain" {
     Environment = var.env
   }
 
-  access_policies = <<CONFIG
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Principal": {
-        "AWS": "*"
-      },
-      "Action": "es:*",
-      "Resource": "arn:aws:es:ca-central-1:460053263286:domain/wf1-wfdm-opensearch-${var.env}/*"
-    }
-  ]
-}
-CONFIG
+  // REMOVED ACCESS POLICY - not needed when instead using fine-grained access
+
+#   access_policies = <<CONFIG
+# {
+#   "Version": "2012-10-17",
+#   "Statement": [
+#     {
+#       "Effect": "Allow",
+#       "Principal": {
+#         "AWS": "*"
+#       },
+#       "Action": "es:*",
+#       "Resource": "arn:aws:es:ca-central-1:460053263286:domain/wf1-wfdm-opensearch-${var.env}/*"
+#     }
+#   ]
+# }
+# CONFIG
 }
 
 /*
